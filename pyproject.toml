@@ -5,7 +5,9 @@ description = "Add your description here"
 readme = "README.md"
 authors = [{ name = "faretek", email = "r@faretek.dev" }]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "gitpython>=3.1.46",
+]
 
 [project.scripts]
 sb2git = "sb2git:main"
