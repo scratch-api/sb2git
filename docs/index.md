@@ -7,6 +7,11 @@ icon: lucide/rocket
 a tool to convert from a directory of sb3 files
 into a git repo so u can put it on e.g. gh
 
+this mostly is for cleaning up big dumps of sb3 files.
+
+I'm not really aiming for support for adding new files, but if
+you want, feel free to open a PR on gh
+
 you may start with a directory like this:
 
 ```
@@ -41,3 +46,15 @@ to store information about that instance of the project.
 
 `sb2git.toml` should also provide a way of assigning
 descriptions/alternate titles to projects.
+
+## output
+
+```
+|- assets/
+|---- dangocat.svg
+|---- pop.wav
+|---- {*all* assets used by *all* instances of this project}
+|- project.json
+|- instance.toml
+|- sb2git.toml
+```
