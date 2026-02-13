@@ -3,8 +3,16 @@ name = "sb2git"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
+authors = [{ name = "faretek", email = "r@faretek.dev" }]
 requires-python = ">=3.12"
 dependencies = []
+
+[project.scripts]
+sb2git = "sb2git:main"
+
+[build-system]
+requires = ["uv_build>=0.9.26,<0.10.0"]
+build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
