@@ -1,5 +1,6 @@
 import argparse
 import shutil
+from git import index
 import tomlkit
 import tomllib
 import dataclasses
@@ -10,7 +11,7 @@ import git
 import scratchattach.editor  # this is slow but easier
 from pathlib import Path
 from slugify import slugify
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 @dataclasses.dataclass
@@ -114,12 +115,13 @@ def init(args: ArgNamespace):
     assets: dict[str, Asset] = {}
     for file in files:
         with zipfile.ZipFile(file) as archive:
-            if file.name.endswith(".sb3"):
+            ending = file.name.split('.')[-1]
+            if ending == "sb3":
                 body = scratchattach.editor.Project.from_json(
                     json.loads(archive.read("project.json"))
                 )  # using from json so assets aren't loaded and no extra zipfiling
             else:
-                assert file.name.endswith(".sprite3")
+                assert ending == "sprite3"
                 body = scratchattach.editor.Sprite.from_json(
                     json.loads(archive.read("sprite.json"))
                 )
@@ -152,12 +154,15 @@ def init(args: ArgNamespace):
         )
 
         asset_arr.append(table)
+
     # store file toml
     file_arr = tomlkit.aot()
     for file in files:
         table = tomlkit.table()
 
-        table.add("name", file.name.removesuffix(".sb3"))
+        ext = file.name.split('.')[-1]
+        table.add("name", file.name.removesuffix('.' + ext))
+        table.add("ext", ext)
         table.add("mtime", datetime.fromtimestamp(file.stat().st_mtime))
         table.add("ctime", datetime.fromtimestamp(file.stat().st_birthtime))
         table.add("size", file.stat().st_size)
@@ -195,11 +200,51 @@ def build(args: ArgNamespace):
     data = tomllib.load(config.open("rb"))
 
     # put stuff in the repo
+    # assets
     for asset in data["assets"]:
         fn: str = asset["md5"] + "." + asset["ext"]
         fp = assets_in / fn
         (assets_out / f"{asset["chosen_name"]}.{asset["ext"]}").write_bytes(fp.read_bytes())
 
     repo.index.add(["assets"])
-    repo.index.commit("chore: add assets")
+    repo.index.commit("chore: add assets", author=actor)
+
+    (output / "sb2git.toml").write_bytes(config.read_bytes())
+    repo.index.add(["sb2git.toml"])
+    repo.index.commit("chore: add original config", author=actor)
+
+    # add proj json in order
+    for file in data["files"]:
+        name: str = file["name"]
+        fp = path / (name + "." + file["ext"])
+        (output / "project.json").unlink(missing_ok=True)
+        (output / "sprite.json").unlink(missing_ok=True)
+
+        if file["ext"] == "sb3":
+            with zipfile.ZipFile(fp) as archive:
+                content = archive.read("project.json")
+                (output / "project.json").write_text(json.dumps(json.loads(content), indent=3))
+        else:
+            with zipfile.ZipFile(fp) as archive:
+                content = archive.read("sprite.json")
+                (output / "sprite.json").write_text(json.dumps(json.loads(content), indent=3))
+        
+        tomlkit.dump({
+            **file
+        }, (output / "instance.toml").open("w", encoding="utf-8"))
+        repo.index.add(["."])
+        mod_at: datetime = file["mtime"]
+        mod_at = datetime(
+            mod_at.year,
+            mod_at.month, 
+            mod_at.day, 
+            mod_at.hour, 
+            mod_at.minute, 
+            mod_at.second, 
+            mod_at.microsecond, 
+            timezone.utc
+        )
+        repo.index.commit(f"feat: {file["name"]}", author=actor, author_date=mod_at)
+        print(f"committed {file}")
+
     print(repo)
