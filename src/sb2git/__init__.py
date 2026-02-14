@@ -3,15 +3,18 @@ import shutil
 import tomlkit
 import dataclasses
 import zipfile
+import json
 import typing as t
+import scratchattach.editor  # this is slow but easier
 from pathlib import Path
+from slugify import slugify
 from datetime import datetime
 
 
 @dataclasses.dataclass
 class Asset:
     md5: str = ""
-    # names: list[str] = dataclasses.field(default_factory=list)
+    names: set[str] = dataclasses.field(default_factory=set)
     ext: str = ""
     content_written: bool = False
     # content: bytes = dataclasses.field(default=b"", repr=False)
@@ -100,13 +103,25 @@ def init(args: ArgNamespace):
     assets: dict[str, Asset] = {}
     for file in files:
         with zipfile.ZipFile(file) as archive:
+            if file.name.endswith(".sb3"):
+                body = scratchattach.editor.Project.from_json(
+                    json.loads(archive.read("project.json"))
+                )  # using from json so assets aren't loaded and no extra zipfiling
+            else:
+                assert file.name.endswith(".sprite3")
+                body = scratchattach.editor.Sprite.from_json(
+                    json.loads(archive.read("sprite.json"))
+                )
             for file in archive.filelist:
                 if file.filename.endswith(".json"):
                     continue
                 asset = assets.get(file.filename, Asset())
                 asset.ext = file.filename.split(".")[-1]
                 asset.md5 = file.filename.removesuffix(f".{asset.ext}")
-                # asset.names.append()  # TODO: read sprite.json or project.json
+
+                for aobj in body.assets:
+                    if aobj.file_name == file.filename:
+                        asset.names.add(aobj.name)
 
                 if not asset.content_written:
                     (assetpath / file.filename).write_bytes(archive.read(file.filename))
@@ -120,6 +135,10 @@ def init(args: ArgNamespace):
         print(asset)
         table.add("md5", asset.md5)
         table.add("ext", asset.ext)
+        table.add("names", list(asset.names))
+        table.add(
+            "chosen_name", slugify(next(iter(asset.names))) if asset.names else "foo"
+        )
 
         asset_arr.append(table)
     # store file toml
@@ -135,7 +154,7 @@ def init(args: ArgNamespace):
         file_arr.append(table)
 
     content = {"files": file_arr, "assets": asset_arr}
-    with outpath.open("w") as f:
+    with outpath.open("w", encoding="utf-8") as f:
         tomlkit.dump(content, f)
 
 

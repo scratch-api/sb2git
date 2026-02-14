@@ -7,6 +7,8 @@ authors = [{ name = "faretek", email = "r@faretek.dev" }]
 requires-python = ">=3.12"
 dependencies = [
     "gitpython>=3.1.46",
+    "python-slugify>=8.0.4",
+    "scratchattach==3.0.0b2",
     "tomlkit>=0.14.0",
 ]
 
