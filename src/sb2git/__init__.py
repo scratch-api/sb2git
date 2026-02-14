@@ -1,10 +1,12 @@
 import argparse
 import shutil
 import tomlkit
+import tomllib
 import dataclasses
 import zipfile
 import json
 import typing as t
+import git
 import scratchattach.editor  # this is slow but easier
 from pathlib import Path
 from slugify import slugify
@@ -25,6 +27,8 @@ class ArgNamespace(argparse.Namespace):
     path: str
     output: str
     sort_by: t.Literal["mtime", "name", "size"]
+    author: str
+    email: str
 
 
 def main() -> None:
@@ -49,6 +53,13 @@ def main() -> None:
         if build := command.add_parser(
             "build", help="Build a sb2git input directory into an output directory"
         ):
+            build.add_argument("path", nargs="?", default=".", type=str)
+            build.add_argument(
+                "--author", type=str, help="name for git author", required=True
+            )
+            build.add_argument(
+                "--email", type=str, help="email for git author", required=True
+            )
             build.add_argument(
                 "-o", "--output", type=str, default="build", help="Output directory"
             )
@@ -61,7 +72,7 @@ def run(args: ArgNamespace):
         case "init":
             init(args)
         case "build":
-            ...
+            build(args)
 
 
 def init(args: ArgNamespace):
@@ -158,4 +169,37 @@ def init(args: ArgNamespace):
         tomlkit.dump(content, f)
 
 
-def build(args: ArgNamespace): ...
+def build(args: ArgNamespace):
+    # setup filesystem
+    path = Path(args.path)
+    config = path / "sb2git.toml"
+    assets_in = path / "assets"
+    assert path.exists() and path.is_dir()
+    assert assets_in.exists() and assets_in.is_dir()
+
+    output = path / args.output
+    print(f"Building into {output}")
+
+    if output.exists():
+        if input(f"Overwrite {output}? (y/N): ") != "y":
+            return
+        shutil.rmtree(output)
+    output.mkdir()
+
+    assets_out = output / "assets"
+    assets_out.mkdir()
+
+    repo = git.Repo.init(output)
+    actor = git.Actor(args.author, args.email)
+    # load stuff
+    data = tomllib.load(config.open("rb"))
+
+    # put stuff in the repo
+    for asset in data["assets"]:
+        fn: str = asset["md5"] + "." + asset["ext"]
+        fp = assets_in / fn
+        (assets_out / f"{asset["chosen_name"]}.{asset["ext"]}").write_bytes(fp.read_bytes())
+
+    repo.index.add(["assets"])
+    repo.index.commit("chore: add assets")
+    print(repo)
